@@ -19,21 +19,47 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install jsonschema check-jsonschema
-      - name: Meta-validate schema (Draft 2020-12)
+      - name: Meta-validate every schema (Draft 2020-12)
         run: |
           python - <<'PY'
-          import json
+          import json, glob
           from jsonschema import Draft202012Validator
-          schema = json.load(open("schema/install-manifest-v0.1.json"))
-          Draft202012Validator.check_schema(schema)
-          print("schema: meta-valid")
+          schemas = sorted(glob.glob("schema/install-manifest-v*.json"))
+          assert schemas, "no schemas found in schema/"
+          for path in schemas:
+              schema = json.load(open(path))
+              Draft202012Validator.check_schema(schema)
+              print(f"meta-valid: {path}")
           PY
-      - name: Validate every example against schema
+      - name: Validate every example against its declared manifest_version
         run: |
-          for f in examples/*.json; do
-            echo "checking $f"
-            check-jsonschema --schemafile schema/install-manifest-v0.1.json "$f"
-          done
+          python - <<'PY'
+          import json, glob, subprocess, sys
+          ok = True
+          for path in sorted(glob.glob("examples/*.json")):
+              manifest = json.load(open(path))
+              version = manifest.get("manifest_version")
+              if not version:
+                  print(f"FAIL {path}: missing manifest_version")
+                  ok = False
+                  continue
+              schema_path = f"schema/install-manifest-v{version}.json"
+              import os
+              if not os.path.isfile(schema_path):
+                  print(f"FAIL {path}: declares v{version} but no schema at {schema_path}")
+                  ok = False
+                  continue
+              print(f"checking {path} against {schema_path}")
+              r = subprocess.run(
+                  ["check-jsonschema", "--schemafile", schema_path, path],
+                  capture_output=True, text=True
+              )
+              sys.stdout.write(r.stdout)
+              sys.stderr.write(r.stderr)
+              if r.returncode != 0:
+                  ok = False
+          sys.exit(0 if ok else 1)
+          PY
 
   cli:
     name: CLI tests (Python ${{ matrix.python-version }})

@@ -42,14 +42,26 @@ def test_missing_required_field(minimal_manifest):
     assert any("smoke" in msg for _, msg in result.errors), result.errors
 
 
-def test_wrong_manifest_version(minimal_manifest):
+def test_unsupported_manifest_version(minimal_manifest):
+    """An unsupported version short-circuits with a clear error rather than
+    silently validating against a wrong schema."""
     m = copy.deepcopy(minimal_manifest)
-    m["manifest_version"] = "0.2"
+    m["manifest_version"] = "9.9"
     result = validate(m)
     assert not result.ok
-    # Both the schema's const violation and our explicit message should be present.
     assert any(
-        ptr == "/manifest_version" and "0.1" in msg
+        ptr == "/manifest_version" and "9.9" in msg
+        for ptr, msg in result.errors
+    ), result.errors
+
+
+def test_missing_manifest_version(minimal_manifest):
+    m = copy.deepcopy(minimal_manifest)
+    del m["manifest_version"]
+    result = validate(m)
+    assert not result.ok
+    assert any(
+        ptr == "/manifest_version" and "required" in msg
         for ptr, msg in result.errors
     ), result.errors
 

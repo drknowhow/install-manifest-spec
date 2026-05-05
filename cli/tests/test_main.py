@@ -30,8 +30,9 @@ def test_validate_ok(tmp_path, minimal_manifest, capsys):
 
 
 def test_validate_invalid(tmp_path, minimal_manifest, capsys):
+    """An unsupported manifest_version short-circuits with a clear error."""
     bad = dict(minimal_manifest)
-    bad["manifest_version"] = "0.2"
+    bad["manifest_version"] = "9.9"
     p = tmp_path / "bad.json"
     p.write_text(json.dumps(bad), encoding="utf-8")
     code, _out, err = _run(["validate", str(p)], capsys)

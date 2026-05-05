@@ -1,14 +1,17 @@
-"""install-manifest — reference CLI for the v0.1 install-manifest spec.
+"""install-manifest — reference CLI for the install-manifest spec.
 
-v0.1.0 MVP exposes:
+Supports manifest_version 0.1 and 0.2. The validator dispatches on the
+manifest's declared version automatically.
+
+This MVP exposes:
   * fetch_manifest(url_or_path)
-  * validate(manifest_dict)
+  * validate(manifest_dict)            # version-dispatched
   * render_consent(manifest_dict)
   * collect_env(env_specs, ...)
 
 Side-effecting operations (install, smoke, persist, revoke) are intentionally
 not yet exposed — they will land in subsequent versions, behind explicit
-subcommands. v0.1.0 is read-only and prompt-only.
+subcommands. The current release is read-only and prompt-only.
 """
 from .errors import (
     FetchError,
@@ -20,7 +23,7 @@ from .validate import validate, ValidationResult
 from .consent import render_consent, collect_consent
 from .collect_env import collect_env
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "__version__",

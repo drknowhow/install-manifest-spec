@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "install-manifest"
-version = "0.1.0"
-description = "Reference CLI for the install-manifest v0.1 spec — fetch, validate, and preview install manifests."
+version = "0.2.0"
+description = "Reference CLI for the install-manifest spec — fetch, validate, and preview install manifests. Supports manifest_version 0.1 and 0.2."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

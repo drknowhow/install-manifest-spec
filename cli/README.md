@@ -1,6 +1,6 @@
 # Reference CLI — `install-manifest`
 
-**Status:** v0.1.0 (2026-05-05) — read-only and prompt-only subcommands implemented (`validate`, `show`, `collect-env`). Side-effecting subcommands (`install`, `smoke`, `revoke`) are pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
+**Status:** v0.2.0 (2026-05-05) — read-only and prompt-only subcommands implemented (`validate`, `show`, `collect-env`). The validator now dispatches automatically on the manifest's declared `manifest_version` and supports both 0.1 and 0.2. Side-effecting subcommands (`install`, `smoke`, `revoke`) remain pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
 
 This document is the design plan for the full CLI. The shipped slice is described in [§ Implementation status](#implementation-status). Other implementations are welcome and encouraged — the schema is the spec; this is just one client.
 
@@ -199,7 +199,7 @@ def cmd_install(manifest_url, *, yes, non_interactive, state_dir, env_overrides)
 | Fetch | network timeout, 404, TLS error | exit 2; nothing persisted |
 | Fetch | content-type not application/json | exit 2; warn the URL may not be a manifest |
 | Validate | schema violation | exit 3; print every JSON Pointer + error message |
-| Validate | manifest_version != "0.1" | exit 3; user's CLI may be wrong version |
+| Validate | manifest_version unsupported | exit 3; user's CLI may be wrong version |
 | Consent | --non-interactive without --yes | exit 4 |
 | Consent | user declines | clean exit 0 |
 | Env | regex mismatch (interactive) | reprompt up to 3 times; on 4th, exit 5 |
@@ -243,6 +243,7 @@ Each `check_*_success` evaluates present fields in `success` as a logical AND. R
 ~/.local/share/install-manifest/
   schema/
     install-manifest-v0.1.json     # bundled copy, read-only
+    install-manifest-v0.2.json     # bundled copy, read-only
   installs/
     <install_id>/
       manifest.json                 # snapshot of fetched manifest
