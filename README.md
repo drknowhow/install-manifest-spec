@@ -16,7 +16,11 @@ The spec is vendor-neutral. Manifests can be hosted at any URL — a public regi
 schema/install-manifest-v0.1.json    # JSON Schema (Draft 2020-12)
 design/v0.1-design-notes.md          # field-by-field rationale + open questions
 examples/gmail.json                  # example manifest for a Gmail MCP tool
-cli/README.md                        # reference Python CLI design (pseudocode)
+cli/                                 # reference Python CLI (v0.1.0: validate, show, collect-env)
+  README.md                          #   surface + design + status table
+  install_manifest/                  #   package
+  tests/                             #   pytest
+  pyproject.toml
 LICENSE                              # MIT
 ```
 
@@ -33,7 +37,14 @@ LICENSE                              # MIT
 
 1. Read [`design/v0.1-design-notes.md`](design/v0.1-design-notes.md) and [`cli/README.md`](cli/README.md).
 2. Implement: fetch manifest → validate → consent → collect env → install → smoke → persist + record. Revoke via `kill_switch`.
-3. The reference Python CLI is sketched in [`cli/README.md`](cli/README.md). Other implementations (Node, Go, Rust) are welcome.
+3. Try the reference Python CLI:
+   ```
+   cd cli && pip install -e ".[test]"
+   install-manifest validate    ../examples/gmail.json
+   install-manifest show        ../examples/gmail.json
+   install-manifest collect-env ../examples/gmail.json --yes --non-interactive --env GOOGLE_CLIENT_ID=...
+   ```
+   v0.1.0 ships read-only and prompt-only subcommands; `install`/`smoke`/`revoke` land in 0.2.0. Other implementations (Node, Go, Rust) are welcome.
 
 ---
 

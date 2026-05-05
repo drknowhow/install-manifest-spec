@@ -1,8 +1,42 @@
 # Reference CLI — `install-manifest`
 
-**Status:** Pseudocode + architecture, 2026-05-05. The reference Python implementation lands in this directory once the v0.1 schema stabilizes.
+**Status:** v0.1.0 (2026-05-05) — read-only and prompt-only subcommands implemented (`validate`, `show`, `collect-env`). Side-effecting subcommands (`install`, `smoke`, `revoke`) are pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
 
-This document is the design plan for the reference CLI that consumes a v0.1 manifest URL and walks the host (agent or human) through install + smoke verification. Other implementations are welcome and encouraged — the schema is the spec; this is just one client.
+This document is the design plan for the full CLI. The shipped slice is described in [§ Implementation status](#implementation-status). Other implementations are welcome and encouraged — the schema is the spec; this is just one client.
+
+## Implementation status
+
+| Subcommand    | Shipped in 0.1.0 | Notes                                                                       |
+|---------------|:----------------:|-----------------------------------------------------------------------------|
+| `validate`    |        ✓         | fetch + JSON Schema validation, exit 0/2/3.                                 |
+| `show`        |        ✓         | fetch + validate + render consent screen. Read-only.                        |
+| `collect-env` |        ✓         | fetch + validate + render consent + prompt for env values. **No install.**  |
+| `install`     |        —         | Acquires artifacts, runs smoke, persists install record. Defer to 0.2.0.    |
+| `verify`      |        —         | Re-runs smoke for an existing install. Defer to 0.2.0.                      |
+| `revoke`      |        —         | Invokes `kill_switch`. Defer to 0.2.0.                                      |
+| `list/status` |        —         | Inspection over the state directory. Defer to 0.2.0.                        |
+
+### Install + run (0.1.0 surface)
+
+```
+pip install ./cli
+install-manifest validate    examples/gmail.json
+install-manifest show        examples/gmail.json
+install-manifest collect-env examples/gmail.json --yes --non-interactive --env GOOGLE_REFRESH_TOKEN=test
+```
+
+Tests: `cd cli && pip install -e ".[test]" && pytest`.
+
+### Why this slice first
+
+Side-effecting subcommands (`install`, `smoke`, `revoke`) each have their own
+risk surface — running shell commands as the user, writing credentials to
+disk, calling DELETE endpoints with the user's tokens. Shipping them
+behind the read-only slice gives the spec a chance to harden against
+manifest authoring mistakes (caught in `validate`) and consent UX issues
+(caught in `show`/`collect-env`) before any real bytes hit the system.
+
+---
 
 ---
 

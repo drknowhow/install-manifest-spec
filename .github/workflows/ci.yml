@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  schema:
+    name: Schema (validator-checked)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install jsonschema check-jsonschema
+      - name: Meta-validate schema (Draft 2020-12)
+        run: |
+          python - <<'PY'
+          import json
+          from jsonschema import Draft202012Validator
+          schema = json.load(open("schema/install-manifest-v0.1.json"))
+          Draft202012Validator.check_schema(schema)
+          print("schema: meta-valid")
+          PY
+      - name: Validate every example against schema
+        run: |
+          for f in examples/*.json; do
+            echo "checking $f"
+            check-jsonschema --schemafile schema/install-manifest-v0.1.json "$f"
+          done
+
+  cli:
+    name: CLI tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install CLI in editable mode with test extras
+        working-directory: cli
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[test]"
+      - name: Pytest
+        working-directory: cli
+        run: pytest -q
