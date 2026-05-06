@@ -35,7 +35,7 @@ from jsonschema import Draft202012Validator
 from .errors import SchemaError, ValidationError
 
 # Tuple is the order versions are surfaced in error messages.
-SUPPORTED_MANIFEST_VERSIONS: Tuple[str, ...] = ("0.1", "0.2")
+SUPPORTED_MANIFEST_VERSIONS: Tuple[str, ...] = ("0.1", "0.2", "0.3")
 
 # Back-compat alias kept for any callers who pinned the v0.1-only constant.
 EXPECTED_MANIFEST_VERSION = "0.1"
