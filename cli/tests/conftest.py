@@ -168,6 +168,53 @@ def minimal_manifest_v0_3_1() -> dict:
 
 
 @pytest.fixture
+def minimal_manifest_v0_4() -> dict:
+    """Smallest fully-valid v0.4 manifest.
+
+    Identical shape to minimal_manifest_v0_3_1 with manifest_version bumped.
+    v0.4 is strictly additive — no v0.3.1 field changes meaning — so a v0.3.1
+    minimal manifest re-declared as v0.4 must validate.
+    """
+    return {
+        "manifest_version": "0.4",
+        "tool": {
+            "id": "tinytool",
+            "version": "1.0.0",
+            "name": "Tiny Tool",
+            "summary": "A tiny tool, used in tests.",
+            "homepage": "https://example.com/tinytool",
+        },
+        "runtime": {
+            "kind": "shell-binary",
+            "install": {"method": "pip", "package": "tinytool", "version_spec": "==1.0.0"},
+            "entrypoint": {"command": ["tinytool"]},
+        },
+        "actions": [
+            {
+                "name": "version",
+                "summary": "Print the tool's version.",
+                "invocation": {
+                    "kind": "subcommand",
+                    "argv_template": ["--version"],
+                },
+                "output": {"format": "text"},
+                "side_effects": "none",
+                "idempotent": True,
+            }
+        ],
+        "smoke": {
+            "kind": "shell",
+            "command": ["tinytool", "--version"],
+            "success": {"exit_code": 0},
+        },
+        "kill_switch": {
+            "kind": "manual",
+            "instructions_url": "https://example.com/tinytool/revoke",
+        },
+    }
+
+
+@pytest.fixture
 def minimal_manifest_v0_3() -> dict:
     """Smallest fully-valid v0.3 manifest.
 
