@@ -1,7 +1,7 @@
 """install-manifest — reference CLI for the install-manifest spec.
 
-Supports manifest_version 0.1, 0.2, and 0.3. The validator dispatches on the
-manifest's declared version automatically.
+Supports manifest_version 0.1, 0.2, 0.3, and 0.3.1. The validator dispatches
+on the manifest's declared version automatically.
 
 This MVP exposes:
   * fetch_manifest(url_or_path)
@@ -23,7 +23,7 @@ from .validate import validate, ValidationResult
 from .consent import render_consent, collect_consent
 from .collect_env import collect_env
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     "__version__",
