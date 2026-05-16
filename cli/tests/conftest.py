@@ -10,6 +10,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_MANIFEST_PATH = REPO_ROOT / "examples" / "gmail.json"
 EXAMPLE_MANIFEST_V0_2_PATH = REPO_ROOT / "examples" / "gmail.v0.2.json"
 EXAMPLE_MANIFEST_V0_3_PATH = REPO_ROOT / "examples" / "gmail.v0.3.json"
+# v0.3.1 has no dedicated example yet — back-compat reuses the v0.3 example
+# with the manifest_version bumped to "0.3.1".
 
 
 @pytest.fixture
@@ -81,6 +83,53 @@ def minimal_manifest_v0_2() -> dict:
     """
     return {
         "manifest_version": "0.2",
+        "tool": {
+            "id": "tinytool",
+            "version": "1.0.0",
+            "name": "Tiny Tool",
+            "summary": "A tiny tool, used in tests.",
+            "homepage": "https://example.com/tinytool",
+        },
+        "runtime": {
+            "kind": "shell-binary",
+            "install": {"method": "pip", "package": "tinytool", "version_spec": "==1.0.0"},
+            "entrypoint": {"command": ["tinytool"]},
+        },
+        "actions": [
+            {
+                "name": "version",
+                "summary": "Print the tool's version.",
+                "invocation": {
+                    "kind": "subcommand",
+                    "argv_template": ["--version"],
+                },
+                "output": {"format": "text"},
+                "side_effects": "none",
+                "idempotent": True,
+            }
+        ],
+        "smoke": {
+            "kind": "shell",
+            "command": ["tinytool", "--version"],
+            "success": {"exit_code": 0},
+        },
+        "kill_switch": {
+            "kind": "manual",
+            "instructions_url": "https://example.com/tinytool/revoke",
+        },
+    }
+
+
+@pytest.fixture
+def minimal_manifest_v0_3_1() -> dict:
+    """Smallest fully-valid v0.3.1 manifest.
+
+    Identical shape to minimal_manifest_v0_3 with manifest_version bumped.
+    v0.3.1 is strictly additive — no v0.3 field changes meaning — so a v0.3
+    minimal manifest re-declared as v0.3.1 must validate.
+    """
+    return {
+        "manifest_version": "0.3.1",
         "tool": {
             "id": "tinytool",
             "version": "1.0.0",
