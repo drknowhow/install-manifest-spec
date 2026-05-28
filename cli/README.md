@@ -1,6 +1,8 @@
 # Reference CLI — `install-manifest`
 
-**Status:** v0.4.0 (2026-05-28) — read-only and prompt-only subcommands implemented (`validate`, `show`, `collect-env`). The validator dispatches automatically on the manifest's declared `manifest_version` and supports `0.1`, `0.2`, `0.3`, `0.3.1`, and `0.4` (all schemas bundled with the wheel for offline validation). Side-effecting subcommands (`install`, `smoke`, `revoke`) remain pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
+**Status:** v0.5.0 (2026-05-28) — read-only and prompt-only subcommands implemented (`validate`, `show`, `collect-env`, `lint`, `diff`). The validator dispatches automatically on the manifest's declared `manifest_version` and supports `0.1`, `0.2`, `0.3`, `0.3.1`, and `0.4` (all schemas bundled with the wheel for offline validation). Side-effecting subcommands (`install`, `smoke`, `revoke`) remain pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
+
+v0.5 adds two new pre-publish workflows on top of `validate`: `lint` runs best-practice rules (kebab-case IDs, SemVer versions, https-only URLs, secret-input constraints, missing `verify`/`kill_switch`) and `diff` classifies changes between two same-version manifests into breaking / additive / cosmetic so publishers can hold themselves to upgrade-safety contracts.
 
 v0.4 adds two manifest surfaces the validator now accepts: `runtime.install.method: "preinstalled"` (with a required `locator` of kind `python-module` / `binary-on-path` / `mcp-server-id`) for tools pre-baked into an agent's runtime image, and `data_boundary.transmits[].to_kind: "agent-supplied"` plus optional `to_constraint` for outbound destinations supplied by the calling agent at runtime. All v0.3.1 manifests validate unmodified against v0.4 — drop-in upgrade.
 
@@ -8,11 +10,13 @@ This document is the design plan for the full CLI. The shipped slice is describe
 
 ## Implementation status
 
-| Subcommand    | Shipped in 0.4.0 | Notes                                                                       |
+| Subcommand    | Shipped in 0.5.0 | Notes                                                                       |
 |---------------|:----------------:|-----------------------------------------------------------------------------|
 | `validate`    |        ✓         | fetch + JSON Schema validation against v0.1 / v0.2 / v0.3 / v0.3.1 / v0.4, exit 0/2/3. |
 | `show`        |        ✓         | fetch + validate + render consent screen. Read-only.                        |
 | `collect-env` |        ✓         | fetch + validate + render consent + prompt for env values. **No install.**  |
+| `lint`        |        ✓         | fetch + validate + run best-practice rules. `--strict`, `--ignore`, `--json`. |
+| `diff`        |        ✓         | fetch + validate two manifests + classify changes. `--upgrade-safe`, `--format`. |
 | `install`     |        —         | Acquires artifacts, runs smoke, persists install record. Deferred.          |
 | `verify`      |        —         | Re-runs smoke for an existing install. Deferred.                            |
 | `revoke`      |        —         | Invokes `kill_switch`. Deferred.                                            |
@@ -25,7 +29,40 @@ pip install install-manifest
 install-manifest validate    https://toolspace.yepgent.com/examples/gmail.v0.3.json
 install-manifest show        https://toolspace.yepgent.com/examples/gmail.v0.3.json
 install-manifest collect-env https://toolspace.yepgent.com/examples/gmail.v0.3.json --yes --non-interactive --env GOOGLE_REFRESH_TOKEN=test
+install-manifest lint        https://toolspace.yepgent.com/examples/gmail.v0.3.json --strict
+install-manifest diff        ./old.json ./new.json --upgrade-safe
 ```
+
+## Lint
+
+`install-manifest lint <url-or-path>` runs schema validation first, then a catalogue of best-practice rules. Severity is `warning` in v1; default exit is `0`, `--strict` makes any remaining finding return exit `6`. Findings are emitted on stderr in the form `warning LMxxx /json/pointer: message`; `--json` emits an array on stdout.
+
+| Code  | Rule                                                                                                |
+|-------|-----------------------------------------------------------------------------------------------------|
+| LM001 | Missing `verify` block when `manifest_version >= 0.3`.                                              |
+| LM002 | Missing `kill_switch` when `manifest_version >= 0.3`.                                               |
+| LM003 | `data_boundary.transmits[]` entry with `to_kind=external` and no `to_constraint`.                   |
+| LM004 | `data_boundary.transmits[]` entries with no `to_kind` (loose v0.3 — suggest upgrade to v0.4).        |
+| LM005 | `actions[]` entry with missing or empty `docs.goal`.                                                |
+| LM006 | `verify` block present but `verify.sla.p95_latency_ms` missing.                                     |
+| LM007 | `tool.id` is not kebab-case (`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`).                                      |
+| LM008 | `tool.version` is not SemVer 2.0.0.                                                                 |
+| LM009 | Any `http://` URL anywhere in the manifest (recursive scan; suggest `https://`).                    |
+| LM010 | `env[]` entry with `secret: true` and neither `regex`/`validation_regex` nor `min_length`.          |
+
+Suppress individual codes with `--ignore LM001,LM004`.
+
+## Diff
+
+`install-manifest diff <a> <b>` validates both manifests, requires they declare the **same `manifest_version`** (v1 hard constraint — raises exit `3` otherwise), and classifies every change into one of three buckets:
+
+- **breaking** — a consumer of `a` cannot transparently upgrade to `b`. Includes: removed actions / scopes / required env vars / `kill_switch`; stricter action input schemas (type changes, new `required`, new `enum`, `additionalProperties` true→false); new `to_kind=external` transmit destinations; same-version-body-changed (`version-mutation`).
+- **additive** — `b` widens capability or guard-rails. New actions, new scope verbs, new optional env vars, newly-added `verify` or `kill_switch` blocks.
+- **cosmetic** — text-only or version-only changes. `tool.docs.*`, `actions[].docs.*`, `tool.summary` edits, `tool.version` bumps where no other change occurred.
+
+`--upgrade-safe` makes the command exit `7` if any breaking changes are detected — drop into a CI pipeline to fail publishers who break consumers without bumping a major version. `--format=json` emits a structured `{breaking: [...], additive: [...], cosmetic: [...]}` document for tooling.
+
+Cross-version diffing is out of scope for v1. Normalize manually or upgrade the older publisher first.
 
 Local development: `cd cli && pip install -e ".[test]" && pytest`.
 

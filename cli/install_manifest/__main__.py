@@ -1,32 +1,39 @@
 """argparse dispatch for the install-manifest CLI.
 
-v0.1.0 subcommands (read-only / prompt-only):
+v0.5.0 subcommands (read-only / prompt-only):
   validate <url-or-path>            — fetch + validate against schema
   show     <url-or-path>            — fetch + validate + render consent screen
   collect-env <url-or-path>         — fetch + validate + render consent + prompt env
+  lint     <url-or-path>            — fetch + validate + run best-practice lint rules
+  diff     <url-a> <url-b>          — fetch + validate both + classify changes
 
 Side-effecting subcommands (install / smoke / persist / revoke) are
-intentionally not exposed in 0.1.0; they will land in subsequent versions.
+intentionally not exposed; they will land in subsequent versions.
 
 Exit codes:
   0  ok
   1  unhandled error (bug)
   2  fetch failed
-  3  validation failed
+  3  validation failed (or unsupported diff: cross-version)
   4  consent declined or non-interactive without --yes
   5  env collection failed
+  6  lint --strict found findings
+  7  diff --upgrade-safe found breaking changes
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from typing import Sequence
 
 from . import __version__
 from .collect_env import collect_env
 from .consent import collect_consent, render_consent
+from .diff import DiffError, diff as run_diff
 from .errors import EnvCollectionError, FetchError, SchemaError, ValidationError
 from .fetch import fetch_manifest
+from .lint import lint as run_lint
 from .validate import validate
 
 
@@ -42,10 +49,16 @@ def _parse_kv_list(values: Sequence[str] | None) -> dict[str, str]:
     return out
 
 
+def _parse_ignore(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    return {code.strip() for code in value.split(",") if code.strip()}
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="install-manifest",
-        description="Reference CLI for the install-manifest v0.1 spec.",
+        description="Reference CLI for the install-manifest spec.",
     )
     p.add_argument("--version", action="version", version=f"install-manifest {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
@@ -80,6 +93,47 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_env.set_defaults(func=cmd_collect_env)
 
+    p_lint = sub.add_parser(
+        "lint",
+        help="Fetch, validate, then run best-practice lint rules.",
+    )
+    p_lint.add_argument("source", help="URL or local path to the manifest.")
+    p_lint.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit non-zero if any findings remain after --ignore.",
+    )
+    p_lint.add_argument(
+        "--ignore",
+        metavar="CODE,CODE",
+        help="Comma-separated list of rule codes to suppress (e.g. LM001,LM004).",
+    )
+    p_lint.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit findings as a JSON array on stdout.",
+    )
+    p_lint.set_defaults(func=cmd_lint)
+
+    p_diff = sub.add_parser(
+        "diff",
+        help="Fetch and validate two manifests at the same version, then classify changes.",
+    )
+    p_diff.add_argument("source_a", help="URL or local path to the older manifest.")
+    p_diff.add_argument("source_b", help="URL or local path to the newer manifest.")
+    p_diff.add_argument(
+        "--upgrade-safe",
+        action="store_true",
+        help="Exit non-zero if any breaking changes are found.",
+    )
+    p_diff.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        help="Output format (default: human).",
+    )
+    p_diff.set_defaults(func=cmd_diff)
+
     return p
 
 
@@ -89,50 +143,46 @@ def _print_validation_failure(source: str, result) -> None:
         print(f"  {ptr}: {msg}", file=sys.stderr)
 
 
-def cmd_validate(args: argparse.Namespace) -> int:
+def _fetch_and_validate(source: str):
+    """Shared prelude for validate/show/collect-env/lint/diff.
+
+    Returns `(exit_code, manifest)` — manifest is None when exit_code != 0.
+    """
     try:
-        manifest, _raw = fetch_manifest(args.source)
+        manifest, _raw = fetch_manifest(source)
     except FetchError as e:
         print(f"error: {e}", file=sys.stderr)
-        return 2
+        return 2, None
 
     result = validate(manifest)
     if not result.ok:
-        _print_validation_failure(args.source, result)
-        return 3
+        _print_validation_failure(source, result)
+        return 3, None
 
+    return 0, manifest
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    code, manifest = _fetch_and_validate(args.source)
+    if code:
+        return code
     tool = manifest.get("tool", {})
     print(f"ok: {tool.get('name', '?')} v{tool.get('version', '?')} — manifest valid")
     return 0
 
 
 def cmd_show(args: argparse.Namespace) -> int:
-    try:
-        manifest, _raw = fetch_manifest(args.source)
-    except FetchError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
-
-    result = validate(manifest)
-    if not result.ok:
-        _print_validation_failure(args.source, result)
-        return 3
-
+    code, manifest = _fetch_and_validate(args.source)
+    if code:
+        return code
     sys.stdout.write(render_consent(manifest))
     return 0
 
 
 def cmd_collect_env(args: argparse.Namespace) -> int:
-    try:
-        manifest, _raw = fetch_manifest(args.source)
-    except FetchError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
-
-    result = validate(manifest)
-    if not result.ok:
-        _print_validation_failure(args.source, result)
-        return 3
+    code, manifest = _fetch_and_validate(args.source)
+    if code:
+        return code
 
     sys.stdout.write(render_consent(manifest))
 
@@ -160,7 +210,6 @@ def cmd_collect_env(args: argparse.Namespace) -> int:
         print(f"error: env collection failed: {e}", file=sys.stderr)
         return 5
 
-    # Print a recap of NON-secret values; never print secret values.
     env_specs = manifest.get("env") or []
     secret_names = {e["name"] for e in env_specs if e.get("secret")}
 
@@ -172,6 +221,71 @@ def cmd_collect_env(args: argparse.Namespace) -> int:
         else:
             print(f"  {name}: {value}")
     return 0
+
+
+def cmd_lint(args: argparse.Namespace) -> int:
+    code, manifest = _fetch_and_validate(args.source)
+    if code:
+        return code
+
+    ignore = _parse_ignore(args.ignore)
+    findings = [f for f in run_lint(manifest) if f.code not in ignore]
+
+    if args.json:
+        json.dump([f.as_dict() for f in findings], sys.stdout, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+    else:
+        for f in findings:
+            print(f"{f.severity} {f.code} {f.path}: {f.message}", file=sys.stderr)
+            if f.suggestion:
+                print(f"  suggestion: {f.suggestion}", file=sys.stderr)
+        if not findings:
+            tool = manifest.get("tool", {})
+            print(f"ok: {tool.get('name', '?')} v{tool.get('version', '?')} — no lint findings")
+
+    if args.strict and findings:
+        return 6
+    return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    code_a, manifest_a = _fetch_and_validate(args.source_a)
+    if code_a:
+        return code_a
+    code_b, manifest_b = _fetch_and_validate(args.source_b)
+    if code_b:
+        return code_b
+
+    try:
+        result = run_diff(manifest_a, manifest_b)
+    except DiffError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 3
+
+    if args.format == "json":
+        json.dump(result.as_dict(), sys.stdout, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+    else:
+        _print_diff_human(result)
+
+    if args.upgrade_safe and result.breaking:
+        return 7
+    return 0
+
+
+def _print_diff_human(result) -> None:
+    if result.is_empty():
+        print("ok: manifests are byte-equivalent — no changes.")
+        return
+
+    def section(title: str, changes) -> None:
+        print(f"{title} ({len(changes)}):")
+        for c in changes:
+            print(f"  [{c.kind}] {c.path}: {c.message}")
+
+    section("breaking", result.breaking)
+    section("additive", result.additive)
+    section("cosmetic", result.cosmetic)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
