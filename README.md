@@ -87,8 +87,8 @@ LICENSE                              # MIT
    ```
    pip install install-manifest
    install-manifest validate path/to/your-tool.v0.4.json
-   install-manifest lint     path/to/your-tool.v0.4.json   # style + best-practice warnings (LM001-LM010)
-   install-manifest diff     v0.3.json v0.4.json           # breaking / additive / cosmetic change report
+   install-manifest lint     path/to/your-tool.v0.4.json                       # style + best-practice warnings (LM001-LM010)
+   install-manifest diff     path/to/your-tool.v0.4-prev.json path/to/your-tool.v0.4.json   # breaking / additive / cosmetic change report (same manifest_version required)
    ```
    Any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`) works equivalently if you prefer not to install the CLI — point it at [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json). `lint` and `diff` are spec-extras with no JSON Schema equivalent.
 4. Host it at a public URL. Submit to a manifest-aware registry, or share the URL directly with agents.
@@ -104,11 +104,11 @@ If your tool is an MCP-stdio server and the protocol's own discovery is enough, 
    cd cli && pip install -e ".[test]"
    install-manifest validate    ../examples/gmail.v0.3.json
    install-manifest lint        ../examples/gmail.v0.3.json
-   install-manifest diff        ../examples/gmail.v0.3.json ../examples/vi-federation.v0.4.json
+   install-manifest diff        ../examples/gmail.v0.3.json ../examples/muninn-flowing.v0.3.json   # both v0.3 — diff requires same manifest_version
    install-manifest show        ../examples/gmail.v0.3.json
    install-manifest collect-env ../examples/gmail.v0.3.json --yes --non-interactive --env GOOGLE_CLIENT_ID=...
    ```
-   The CLI dispatches automatically on `manifest_version`. Other implementations (Node, Go, Rust) are welcome.
+   The CLI dispatches automatically on `manifest_version`. `diff` rejects cross-version comparisons with `DiffError` (exit `3`); compare two manifests at the same `manifest_version`. Other implementations (Node, Go, Rust) are welcome.
 
 ---
 
