@@ -40,7 +40,7 @@ The index supports three publisher identity kinds — `github` (owner/repo), `ht
 
 The well-known index is **versioned independently** of the install-manifest schema: index v1 references install-manifest v0.1 / v0.2 / v0.3 / v0.3.1 / v0.4 URLs without coupling to any single version. Future install-manifest releases extend the index's `manifest_version` enum additively.
 
-**Pre-publish check.** Before announcing your index to a registry, run `install-manifest validate <path>` on every manifest URL it points at. The reference CLI uses the same bundled schemas downstream registries use, so a CLI pass is the canonical guarantee that federation sync won't skip your entries. Registries SHOULD also validate fetched manifest bodies against the canonical schema (not just the well-known index surface) — `install-manifest>=0.4.0` exposes `install_manifest.validate.validate(doc)` as a library function for that purpose.
+**Pre-publish check.** Before announcing your index to a registry, run `install-manifest validate <path>` on every manifest URL it points at, and `install-manifest lint <path>` to catch style + best-practice issues (missing `verify`, missing `kill_switch`, weak `data_boundary`, schema-valid-but-ugly `tool.id` / `tool.version`). The reference CLI uses the same bundled schemas downstream registries use, so a CLI pass is the canonical guarantee that federation sync won't skip your entries. Registries SHOULD also validate fetched manifest bodies against the canonical schema (not just the well-known index surface) — `install-manifest>=0.4.0` exposes `install_manifest.validate.validate(doc)` as a library function for that purpose, and `>=0.5.0` adds `install_manifest.lint.lint(doc)` and `install_manifest.diff.diff(before, after)`.
 
 ---
 
@@ -87,8 +87,10 @@ LICENSE                              # MIT
    ```
    pip install install-manifest
    install-manifest validate path/to/your-tool.v0.4.json
+   install-manifest lint     path/to/your-tool.v0.4.json   # style + best-practice warnings (LM001-LM010)
+   install-manifest diff     v0.3.json v0.4.json           # breaking / additive / cosmetic change report
    ```
-   Any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`) works equivalently if you prefer not to install the CLI — point it at [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json).
+   Any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`) works equivalently if you prefer not to install the CLI — point it at [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json). `lint` and `diff` are spec-extras with no JSON Schema equivalent.
 4. Host it at a public URL. Submit to a manifest-aware registry, or share the URL directly with agents.
 
 If your tool is an MCP-stdio server and the protocol's own discovery is enough, v0.1 is still a perfectly valid choice; pin `manifest_version: "0.1"` and use the v0.1 schema.
@@ -101,6 +103,8 @@ If your tool is an MCP-stdio server and the protocol's own discovery is enough, 
    ```
    cd cli && pip install -e ".[test]"
    install-manifest validate    ../examples/gmail.v0.3.json
+   install-manifest lint        ../examples/gmail.v0.3.json
+   install-manifest diff        ../examples/gmail.v0.3.json ../examples/vi-federation.v0.4.json
    install-manifest show        ../examples/gmail.v0.3.json
    install-manifest collect-env ../examples/gmail.v0.3.json --yes --non-interactive --env GOOGLE_CLIENT_ID=...
    ```
