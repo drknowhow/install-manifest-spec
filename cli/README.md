@@ -1,31 +1,33 @@
 # Reference CLI — `install-manifest`
 
-**Status:** v0.2.0 (2026-05-05) — read-only and prompt-only subcommands implemented (`validate`, `show`, `collect-env`). The validator now dispatches automatically on the manifest's declared `manifest_version` and supports both 0.1 and 0.2. Side-effecting subcommands (`install`, `smoke`, `revoke`) remain pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
+**Status:** v0.4.0 (2026-05-28) — read-only and prompt-only subcommands implemented (`validate`, `show`, `collect-env`). The validator dispatches automatically on the manifest's declared `manifest_version` and supports `0.1`, `0.2`, `0.3`, `0.3.1`, and `0.4` (all schemas bundled with the wheel for offline validation). Side-effecting subcommands (`install`, `smoke`, `revoke`) remain pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
+
+v0.4 adds two manifest surfaces the validator now accepts: `runtime.install.method: "preinstalled"` (with a required `locator` of kind `python-module` / `binary-on-path` / `mcp-server-id`) for tools pre-baked into an agent's runtime image, and `data_boundary.transmits[].to_kind: "agent-supplied"` plus optional `to_constraint` for outbound destinations supplied by the calling agent at runtime. All v0.3.1 manifests validate unmodified against v0.4 — drop-in upgrade.
 
 This document is the design plan for the full CLI. The shipped slice is described in [§ Implementation status](#implementation-status). Other implementations are welcome and encouraged — the schema is the spec; this is just one client.
 
 ## Implementation status
 
-| Subcommand    | Shipped in 0.1.0 | Notes                                                                       |
+| Subcommand    | Shipped in 0.4.0 | Notes                                                                       |
 |---------------|:----------------:|-----------------------------------------------------------------------------|
-| `validate`    |        ✓         | fetch + JSON Schema validation, exit 0/2/3.                                 |
+| `validate`    |        ✓         | fetch + JSON Schema validation against v0.1 / v0.2 / v0.3 / v0.3.1 / v0.4, exit 0/2/3. |
 | `show`        |        ✓         | fetch + validate + render consent screen. Read-only.                        |
 | `collect-env` |        ✓         | fetch + validate + render consent + prompt for env values. **No install.**  |
-| `install`     |        —         | Acquires artifacts, runs smoke, persists install record. Defer to 0.2.0.    |
-| `verify`      |        —         | Re-runs smoke for an existing install. Defer to 0.2.0.                      |
-| `revoke`      |        —         | Invokes `kill_switch`. Defer to 0.2.0.                                      |
-| `list/status` |        —         | Inspection over the state directory. Defer to 0.2.0.                        |
+| `install`     |        —         | Acquires artifacts, runs smoke, persists install record. Deferred.          |
+| `verify`      |        —         | Re-runs smoke for an existing install. Deferred.                            |
+| `revoke`      |        —         | Invokes `kill_switch`. Deferred.                                            |
+| `list/status` |        —         | Inspection over the state directory. Deferred.                              |
 
-### Install + run (0.1.0 surface)
+### Install + run
 
 ```
-pip install ./cli
-install-manifest validate    examples/gmail.json
-install-manifest show        examples/gmail.json
-install-manifest collect-env examples/gmail.json --yes --non-interactive --env GOOGLE_REFRESH_TOKEN=test
+pip install install-manifest
+install-manifest validate    https://toolspace.yepgent.com/examples/gmail.v0.3.json
+install-manifest show        https://toolspace.yepgent.com/examples/gmail.v0.3.json
+install-manifest collect-env https://toolspace.yepgent.com/examples/gmail.v0.3.json --yes --non-interactive --env GOOGLE_REFRESH_TOKEN=test
 ```
 
-Tests: `cd cli && pip install -e ".[test]" && pytest`.
+Local development: `cd cli && pip install -e ".[test]" && pytest`.
 
 ### Why this slice first
 
@@ -244,6 +246,9 @@ Each `check_*_success` evaluates present fields in `success` as a logical AND. R
   schema/
     install-manifest-v0.1.json     # bundled copy, read-only
     install-manifest-v0.2.json     # bundled copy, read-only
+    install-manifest-v0.3.json     # bundled copy, read-only
+    install-manifest-v0.3.1.json   # bundled copy, read-only
+    install-manifest-v0.4.json     # bundled copy, read-only
   installs/
     <install_id>/
       manifest.json                 # snapshot of fetched manifest
@@ -258,13 +263,14 @@ Each `check_*_success` evaluates present fields in `success` as a logical AND. R
 
 ---
 
-## 8. Deferred to v0.2 of the CLI
+## 8. Deferred to a future CLI release
 
-- **Manifest signing.** Fetch step does not currently verify a signature. The seller-trust model in v0.1 is "the user trusted the URL they typed in." v0.2 adds Sigstore-style signing.
-- **Manifest registry resolution.** v0.1 takes a URL. v0.2 will accept a registry-relative ID like `gmail-yep@1.0.0`.
-- **Upgrade path.** v0.1 has install + revoke. Upgrade is "revoke old, install new." v0.2 will add `upgrade <install_id>` that diffs manifests.
-- **Concurrent install protection.** v0.1 assumes one CLI invocation at a time per state-dir. v0.2 adds a lock file.
-- **Health scheduler.** v0.1 runs smoke once at install time. v0.2 will optionally schedule re-verification.
+- **Side-effecting subcommands.** `install`, `verify`, `revoke`, `list`, `status` are designed (§§ 3-7) but not yet shipped. The current wheel is read-only / prompt-only.
+- **Manifest signing.** Fetch step does not currently verify a signature. The seller-trust model today is "the user trusted the URL they typed in." Sigstore-style signing is planned.
+- **Manifest registry resolution.** Today the CLI takes a URL. A future release will accept a registry-relative ID like `gmail-yep@1.0.0`.
+- **Upgrade path.** Once `install` + `revoke` ship, upgrade will initially be "revoke old, install new"; a later release will add `upgrade <install_id>` that diffs manifests.
+- **Concurrent install protection.** Single-invocation-per-state-dir assumption today; lock file planned alongside `install`.
+- **Health scheduler.** Smoke runs once at install time (when `install` ships); optional scheduled re-verification is planned.
 
 ---
 
