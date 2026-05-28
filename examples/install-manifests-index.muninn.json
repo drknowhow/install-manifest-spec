@@ -1,0 +1,46 @@
+{
+  "version": "1",
+  "publisher": {
+    "kind": "github",
+    "id": "oaustegard/muninn-utilities",
+    "display_name": "Muninn Utilities",
+    "homepage": "https://github.com/oaustegard/muninn-utilities",
+    "contact": "oskar@example.com"
+  },
+  "generated_at": "2026-05-28T00:00:00Z",
+  "manifests": [
+    {
+      "id": "muninn-bsky-card",
+      "manifest_url": "https://raw.githubusercontent.com/oaustegard/muninn-utilities/main/manifests/bsky-card/muninn-bsky-card.v0.4.json",
+      "manifest_version": "0.4",
+      "status": "active",
+      "summary": "Render a Bluesky external embed card for a URL.",
+      "tags": ["bluesky", "embed", "social"]
+    },
+    {
+      "id": "muninn-verify-patch",
+      "manifest_url": "https://raw.githubusercontent.com/oaustegard/muninn-utilities/main/manifests/verify-patch/muninn-verify-patch.v0.4.json",
+      "manifest_version": "0.4",
+      "status": "active",
+      "summary": "Run a v0.4 manifest's verify suite against the live tool and patch SLA drift.",
+      "tags": ["verify", "sla", "patch", "manifest-tooling"]
+    },
+    {
+      "id": "muninn-perch-publish",
+      "manifest_url": "https://raw.githubusercontent.com/oaustegard/muninn-utilities/main/manifests/perch-publish/muninn-perch-publish.v0.4.json",
+      "manifest_version": "0.4",
+      "status": "active",
+      "summary": "Publish a Perch post (long-form blog) on Muninn's behalf.",
+      "tags": ["blog", "publish", "long-form"]
+    },
+    {
+      "id": "muninn-flowing",
+      "manifest_url": "https://raw.githubusercontent.com/oaustegard/muninn-utilities/main/manifests/flowing/muninn-flowing.v0.3.json",
+      "manifest_version": "0.3",
+      "status": "deprecated",
+      "deprecated_in_favor_of": "muninn-perch-publish",
+      "summary": "Earlier framework-shaped blog-publish tool. Superseded by muninn-perch-publish at v0.4.",
+      "tags": ["blog", "deprecated"]
+    }
+  ]
+}

@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://toolspace.yepgent.com/schemas/well-known-index-v1.json",
+  "title": "Install Manifests Well-Known Index",
+  "description": "v1 — Publisher-hosted index of install-manifest URLs. A publisher hosts this JSON at a kind-specific discovery location (github raw, https /.well-known/, or atproto PDS record). A federated registry crawls each publisher in its allowlist, fetches this index, and resolves the listed manifest_urls to canonical install-manifests. The contract is: registries do not need a publish API; publishers do not need a registry account. Discovery is one-way HTTP fetch against a maintainer-curated publishers.json allowlist.",
+  "type": "object",
+  "required": ["version", "publisher", "generated_at", "manifests"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1",
+      "description": "Version of THIS index schema. Pinned. Future index schemas bump."
+    },
+
+    "publisher": {
+      "type": "object",
+      "description": "Who is publishing this index. Identity kind determines how the registry verifies ownership of the discovery location.",
+      "required": ["kind", "id", "display_name"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["github", "https", "atproto"],
+          "description": "Identity kind. 'github' = owner/repo on github.com (ownership proven implicitly by repo write access). 'https' = a domain the publisher controls (ownership proven by DNS TXT record OR a maintainer-issued challenge file at /.well-known/toolspace-challenge.txt). 'atproto' = a DID on the AT Protocol network (ownership proven by signed PDS record at lexicon app.toolspace.installManifests)."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Kind-specific identifier. For 'github': '<owner>/<repo>' (e.g. 'oaustegard/muninn-utilities'). For 'https': a bare hostname (e.g. 'muninn.example.com'). For 'atproto': a DID (e.g. 'did:plc:abc123...' or 'did:web:example.com'). Per-kind regex pattern enforced via the top-level allOf."
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Human-readable name surfaced in the registry UI. Same cap as install-manifest's tool.name."
+        },
+        "homepage": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional canonical URL for the publisher. Repo page, project site, or about page."
+        },
+        "contact": {
+          "type": "string",
+          "format": "email",
+          "description": "Optional contact address for the registry maintainer to reach the publisher (broken links, schema migrations, security)."
+        },
+        "atproto_record_uri": {
+          "type": "string",
+          "pattern": "^at://",
+          "description": "Required when kind='atproto'. The at-uri of the PDS record holding the canonical signed copy of this index (e.g. 'at://did:plc:abc.../app.toolspace.installManifests/self'). Registries verify the at-uri's record matches the fetched index."
+        }
+      }
+    },
+
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when this index was generated. Registries use this to detect freshness; stale indexes can be quarantined."
+    },
+
+    "manifests": {
+      "type": "array",
+      "description": "Install-manifest URLs the publisher claims authorship of. Empty arrays are legal (a publisher temporarily without listed tools).",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": ["id", "manifest_url", "manifest_version", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+            "description": "Globally unique tool id. MUST match the install-manifest's tool.id at manifest_url. Registries reject indexes whose declared id doesn't match the fetched manifest's tool.id."
+          },
+          "manifest_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to the install-manifest JSON document. SHOULD be a stable URL (commit-pinned for git hosts is best; main-branch raw is acceptable). MUST be fetchable by an anonymous HTTP client."
+          },
+          "manifest_version": {
+            "type": "string",
+            "enum": ["0.1", "0.2", "0.3", "0.3.1", "0.4"],
+            "description": "Declared install-manifest schema version of the document at manifest_url. Registries use this to fast-route validation. MUST match the manifest's actual manifest_version field. Enum extends as install-manifest schema versions ship."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "deprecated", "broken", "quarantined"],
+            "description": "Lifecycle state. 'active' = current and supported. 'deprecated' = still works but the publisher recommends alternatives. 'broken' = publisher acknowledges the manifest_url 404s or fails validation. 'quarantined' = registry-set, surfaced back here as a hint; publishers SHOULD set 'broken' for self-acknowledged issues."
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280,
+            "description": "Optional. One-sentence description, intended to mirror the install-manifest's tool.summary. Lets registries surface meaningful list views without fetching every manifest. Same 280-char cap as install-manifest's tool.summary."
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+            "maxItems": 16,
+            "description": "Optional. Capability tags. Intended to mirror the install-manifest's tool.tags; same 16-item cap, same lowercase-hyphen pattern. Lets registries filter without per-manifest fetches."
+          },
+          "deprecated_in_favor_of": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+            "description": "Optional. Required-when-status='deprecated' (enforced via top-level allOf). Tool id the publisher recommends instead. Registries MAY surface as a 'see also' link."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "status": { "const": "deprecated" } },
+              "required": ["status"]
+            },
+            "then": { "required": ["deprecated_in_favor_of"] }
+          }
+        ]
+      }
+    }
+  },
+
+  "allOf": [
+    {
+      "title": "publisher.id pattern by kind",
+      "description": "Each identity kind constrains the shape of publisher.id. github = '<owner>/<repo>' with the GitHub-allowed character set. https = a bare hostname (no scheme, no path). atproto = a DID matching did:plc:|did:web: with the spec-allowed character set.",
+      "if": {
+        "properties": {
+          "publisher": {
+            "properties": { "kind": { "const": "github" } },
+            "required": ["kind"]
+          }
+        },
+        "required": ["publisher"]
+      },
+      "then": {
+        "properties": {
+          "publisher": {
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}/[A-Za-z0-9._-]{1,100}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "publisher": {
+            "properties": { "kind": { "const": "https" } },
+            "required": ["kind"]
+          }
+        },
+        "required": ["publisher"]
+      },
+      "then": {
+        "properties": {
+          "publisher": {
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "publisher": {
+            "properties": { "kind": { "const": "atproto" } },
+            "required": ["kind"]
+          }
+        },
+        "required": ["publisher"]
+      },
+      "then": {
+        "properties": {
+          "publisher": {
+            "required": ["atproto_record_uri"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^did:(plc:[a-z0-9]{24}|web:[a-z0-9.-]+)$"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

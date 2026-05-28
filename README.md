@@ -24,6 +24,24 @@ v0.4 is **strictly additive** to v0.3.1 (and therefore to v0.3): every v0.3.1 ma
 
 ---
 
+## Federation discovery (well-known index)
+
+The install-manifest spec is registry-agnostic by design: a manifest lives at any URL, and any registry can index it. Through v0.4, the question *"how does a registry learn about a publisher's manifests in the first place?"* was answered by hand — registry maintainers manually mirrored URLs into their indexes when new manifests shipped.
+
+The **well-known index** is a sibling spec that closes that gap. A publisher hosts one JSON document at a kind-specific discovery location listing the install-manifest URLs they claim authorship of. A registry crawls each allowlisted publisher's index on its own schedule and resolves the listed URLs to canonical manifests.
+
+| Artifact | Path |
+|---|---|
+| Schema | [`schema/well-known-index-v1.json`](schema/well-known-index-v1.json) |
+| Design notes | [`design/well-known-index-v1-design-notes.md`](design/well-known-index-v1-design-notes.md) |
+| Example | [`examples/install-manifests-index.muninn.json`](examples/install-manifests-index.muninn.json) |
+
+The index supports three publisher identity kinds — `github` (owner/repo), `https` (domain with DNS or `.well-known/` challenge), and `atproto` (DID + signed PDS record) — so independent tool authors don't need to own a domain to be federation-discoverable. The trust gate (which publishers a given registry crawls) lives in each registry's own allowlist; this spec defines the publisher-hosted document, not the allowlist format.
+
+The well-known index is **versioned independently** of the install-manifest schema: index v1 references install-manifest v0.1 / v0.2 / v0.3 / v0.3.1 / v0.4 URLs without coupling to any single version. Future install-manifest releases extend the index's `manifest_version` enum additively.
+
+---
+
 ## Repo layout
 
 ```
@@ -33,12 +51,14 @@ schema/
   install-manifest-v0.3.json         # superseded by 0.3.1
   install-manifest-v0.3.1.json       # superseded by 0.4
   install-manifest-v0.4.json         # current
+  well-known-index-v1.json           # federation discovery index (sibling spec)
 design/
   v0.1-design-notes.md               # field-by-field rationale (frozen)
   v0.2-design-notes.md               # field-by-field rationale (frozen)
   v0.3-design-notes.md               # field-by-field rationale (superseded by 0.3.1)
   v0.3.1-design-notes.md             # field-by-field rationale (superseded by 0.4)
   v0.4-design-notes.md               # field-by-field rationale (current)
+  well-known-index-v1-design-notes.md  # federation discovery index design notes
 examples/
   gmail.json                         # v0.1 example (MCP-stdio Gmail tool)
   gmail.v0.2.json                    # v0.2 example (Python-module Gmail tool with actions[])
@@ -46,6 +66,7 @@ examples/
   muninn-flowing.v0.3.json           # community attestation (Muninn) — validates unmodified against v0.4
   muninn-verify-patch.v0.3.json      # community attestation (Muninn) — validates unmodified against v0.4
   muninn-perch-publish.v0.3.json     # community attestation (Muninn) — validates unmodified against v0.4
+  install-manifests-index.muninn.json # example well-known index (kind=github, 4 manifests)
 cli/                                 # reference Python CLI
   install_manifest/                  #   package — version-dispatch validator
   tests/                             #   pytest (covers all five versions)
