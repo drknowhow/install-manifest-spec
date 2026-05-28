@@ -42,6 +42,8 @@ The well-known index is **versioned independently** of the install-manifest sche
 
 **Pre-publish check.** Before announcing your index to a registry, run `install-manifest validate <path>` on every manifest URL it points at. The reference CLI uses the same bundled schemas downstream registries use, so a CLI pass is the canonical guarantee that federation sync won't skip your entries. Registries SHOULD also validate fetched manifest bodies against the canonical schema (not just the well-known index surface) — `install-manifest>=0.4.0` exposes `install_manifest.validate.validate(doc)` as a library function for that purpose.
 
+Beyond schema validity, `install-manifest>=0.5.0` adds `install-manifest lint <path> [--strict]` — ten best-practice rules covering missing `verify` / `kill_switch`, weak `data_boundary` declarations, non-HTTPS URLs, loose secret acceptance, non-kebab-case `tool.id`, non-SemVer `tool.version`, missing per-action `docs.goal`, and unbounded `verify.sla`. Default exit is `0` with stderr warnings; `--strict` exits non-zero for CI gating. See [`cli/README.md`](cli/README.md) for the full rule catalog.
+
 ---
 
 ## Repo layout
@@ -87,8 +89,9 @@ LICENSE                              # MIT
    ```
    pip install install-manifest
    install-manifest validate path/to/your-tool.v0.4.json
+   install-manifest lint     path/to/your-tool.v0.4.json   # best-practice warnings (0.5.0+)
    ```
-   Any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`) works equivalently if you prefer not to install the CLI — point it at [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json).
+   Any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`) works equivalently for `validate` if you prefer not to install the CLI — point it at [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json). `lint` is CLI-only.
 4. Host it at a public URL. Submit to a manifest-aware registry, or share the URL directly with agents.
 
 If your tool is an MCP-stdio server and the protocol's own discovery is enough, v0.1 is still a perfectly valid choice; pin `manifest_version: "0.1"` and use the v0.1 schema.
@@ -103,8 +106,10 @@ If your tool is an MCP-stdio server and the protocol's own discovery is enough, 
    install-manifest validate    ../examples/gmail.v0.3.json
    install-manifest show        ../examples/gmail.v0.3.json
    install-manifest collect-env ../examples/gmail.v0.3.json --yes --non-interactive --env GOOGLE_CLIENT_ID=...
+   install-manifest lint        ../examples/gmail.v0.3.json                              # best-practice warnings (0.5.0+)
+   install-manifest diff        ../examples/gmail.v0.3.json <upgraded-url> --upgrade-safe # breaking-change detector (0.5.0+)
    ```
-   The CLI dispatches automatically on `manifest_version`. Other implementations (Node, Go, Rust) are welcome.
+   The CLI dispatches automatically on `manifest_version`. `diff` requires both manifests to declare the same `manifest_version`. Other implementations (Node, Go, Rust) are welcome.
 
 ---
 
