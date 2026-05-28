@@ -40,6 +40,8 @@ The index supports three publisher identity kinds — `github` (owner/repo), `ht
 
 The well-known index is **versioned independently** of the install-manifest schema: index v1 references install-manifest v0.1 / v0.2 / v0.3 / v0.3.1 / v0.4 URLs without coupling to any single version. Future install-manifest releases extend the index's `manifest_version` enum additively.
 
+**Pre-publish check.** Before announcing your index to a registry, run `install-manifest validate <path>` on every manifest URL it points at. The reference CLI uses the same bundled schemas downstream registries use, so a CLI pass is the canonical guarantee that federation sync won't skip your entries. Registries SHOULD also validate fetched manifest bodies against the canonical schema (not just the well-known index surface) — `install-manifest>=0.4.0` exposes `install_manifest.validate.validate(doc)` as a library function for that purpose.
+
 ---
 
 ## Repo layout
@@ -81,7 +83,12 @@ LICENSE                              # MIT
 
 1. Read [`design/v0.4-design-notes.md`](design/v0.4-design-notes.md) — covers the v0.4 additive deltas and links back to v0.3.1 / v0.3 / v0.2 / v0.1 for unchanged surfaces.
 2. Copy [`examples/gmail.v0.3.json`](examples/gmail.v0.3.json) and adapt for your tool. Bump `manifest_version` to `"0.4"` if you adopt any new field (`runtime.install.method: "preinstalled"` + `locator`, `data_boundary.transmits[].to_kind: "agent-supplied"`, optional `to_constraint`); otherwise stay on `"0.3"` or `"0.3.1"`.
-3. Validate against [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json) using any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`, etc.).
+3. **Validate before publishing.** Run the reference CLI against your manifest — it dispatches on `manifest_version` and uses the same bundled schemas registries use, so passing the CLI means downstream registries (including toolspace.yepgent.com's federation sync) won't reject your manifest.
+   ```
+   pip install install-manifest
+   install-manifest validate path/to/your-tool.v0.4.json
+   ```
+   Any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`) works equivalently if you prefer not to install the CLI — point it at [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json).
 4. Host it at a public URL. Submit to a manifest-aware registry, or share the URL directly with agents.
 
 If your tool is an MCP-stdio server and the protocol's own discovery is enough, v0.1 is still a perfectly valid choice; pin `manifest_version: "0.1"` and use the v0.1 schema.
