@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
-  { name = "Dimitri Tselenchuk", email = "dimitri@yepgent.com" }
+  { name = "Dimitri T", email = "dimitri@yepgent.com" }
 ]
 keywords = ["install-manifest", "mcp", "agent", "tooling"]
 classifiers = [
