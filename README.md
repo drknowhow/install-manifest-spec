@@ -2,11 +2,41 @@
 
 **v0.4 — JSON manifests that let autonomous agents install, verify, drive, and revoke tools without a human in the loop.**
 
+[![PyPI](https://img.shields.io/pypi/v/install-manifest)](https://pypi.org/project/install-manifest/) [![Python](https://img.shields.io/pypi/pyversions/install-manifest)](https://pypi.org/project/install-manifest/) [![CI](https://github.com/drknowhow/install-manifest-spec/actions/workflows/ci.yml/badge.svg)](https://github.com/drknowhow/install-manifest-spec/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**Live:** [registry](https://toolspace.yepgent.com/registry/) · [publish your tool](https://toolspace.yepgent.com/publish/) · [toolspace.yepgent.com](https://toolspace.yepgent.com)
+
 Every existing MCP tool directory is built for a human developer who browses, reads READMEs, clones repos, and manually configures credentials. This spec is the inversion: a structured contract that lets an *agent* (not a person) parse a manifest, prompt its human owner for exactly the env vars needed, install the tool, run a smoke test, and confirm — without a human in the install loop.
 
 A manifest is a JSON document. An agent fetches it, validates it against the schema, surfaces scopes and cost to its human owner for consent, collects env values, installs the tool's artifacts, runs the declared smoke test, and persists the install record. Revocation runs in reverse via the manifest's `kill_switch`.
 
 The spec is vendor-neutral. Manifests can be hosted at any URL — a public registry, a `.well-known` path, a raw GitHub file. Multiple registries can index the same manifests. The contract is the moat, not any single registry.
+
+---
+
+## What a manifest looks like
+
+```json
+{
+  "manifest_version": "0.4",
+  "tool":    { "id": "gmail", "version": "1.0.0", "name": "Gmail", "...": "..." },
+  "runtime": { "kind": "mcp-stdio", "install": { "method": "pip", "package": "gmail-tool" } },
+  "scopes":  [ { "resource": "gmail.messages", "actions": ["read", "send"], "...": "..." } ],
+  "data_boundary": { "reads": ["gmail.messages"], "transmits": [], "persists": [] },
+  "smoke":       { "kind": "action-call", "...": "..." },
+  "kill_switch": { "kind": "manual", "instructions": "Revoke the OAuth grant, then uninstall." }
+}
+```
+
+Don't write it from scratch — scaffold a valid starter in seconds with the reference CLI:
+
+```
+pip install install-manifest
+install-manifest init --id my-tool       # writes my-tool.json — then edit the TODO placeholders
+install-manifest validate my-tool.json
+```
+
+**Publishing a tool?** See the [publish guide](https://toolspace.yepgent.com/publish/) — host your manifest, get it listed, and federate so updates flow in automatically. Browse what's already there in the [registry](https://toolspace.yepgent.com/registry/).
 
 ---
 
@@ -81,17 +111,21 @@ LICENSE                              # MIT
 
 ## Quick start (for tool authors)
 
-1. Read [`design/v0.4-design-notes.md`](design/v0.4-design-notes.md) — covers the v0.4 additive deltas and links back to v0.3.1 / v0.3 / v0.2 / v0.1 for unchanged surfaces.
-2. Copy [`examples/gmail.v0.3.json`](examples/gmail.v0.3.json) and adapt for your tool. Bump `manifest_version` to `"0.4"` if you adopt any new field (`runtime.install.method: "preinstalled"` + `locator`, `data_boundary.transmits[].to_kind: "agent-supplied"`, optional `to_constraint`); otherwise stay on `"0.3"` or `"0.3.1"`.
-3. **Validate before publishing.** Run the reference CLI against your manifest — it dispatches on `manifest_version` and uses the same bundled schemas registries use, so passing the CLI means downstream registries (including toolspace.yepgent.com's federation sync) won't reject your manifest.
+1. **Scaffold a starter.** The reference CLI writes a valid v0.4 manifest so you never start from a blank file:
    ```
    pip install install-manifest
-   install-manifest validate path/to/your-tool.v0.4.json
-   install-manifest lint     path/to/your-tool.v0.4.json                       # style + best-practice warnings (LM001-LM010)
-   install-manifest diff     path/to/your-tool.v0.4-prev.json path/to/your-tool.v0.4.json   # breaking / additive / cosmetic change report (same manifest_version required)
+   install-manifest init --id my-tool        # writes my-tool.json — an mcp-stdio + pip starter with TODO placeholders
    ```
-   Any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`) works equivalently if you prefer not to install the CLI — point it at [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json). `lint` and `diff` are spec-extras with no JSON Schema equivalent.
-4. Host it at a public URL. Submit to a manifest-aware registry, or share the URL directly with agents.
+   Prefer a worked example? Copy [`examples/gmail.v0.3.json`](examples/gmail.v0.3.json) (validates unmodified against v0.4) and adapt.
+2. **Fill it in.** [`design/v0.4-design-notes.md`](design/v0.4-design-notes.md) covers the v0.4 additive deltas and links back to v0.3.1 / v0.3 / v0.2 / v0.1 for unchanged surfaces. Bump `manifest_version` to `"0.4"` only if you adopt a v0.4 field (`runtime.install.method: "preinstalled"` + `locator`, `data_boundary.transmits[].to_kind: "agent-supplied"`, optional `to_constraint`); otherwise `"0.3"` / `"0.3.1"` stay valid.
+3. **Validate + lint before publishing.** The CLI dispatches on `manifest_version` and uses the same bundled schemas registries use, so a clean pass means downstream registries (including toolspace.yepgent.com's federation sync) won't reject your manifest.
+   ```
+   install-manifest validate my-tool.json
+   install-manifest lint     my-tool.json                  # style + best-practice warnings (LM001-LM010)
+   install-manifest diff     old.json new.json             # breaking / additive / cosmetic (same manifest_version required)
+   ```
+   Any JSON Schema validator (`ajv`, `jsonschema`, `check-jsonschema`) works against [`schema/install-manifest-v0.4.json`](schema/install-manifest-v0.4.json) if you'd rather not install the CLI; `lint` and `diff` are spec-extras with no JSON Schema equivalent.
+4. **Host + publish.** Put the manifest at a public URL, then [get it listed](https://toolspace.yepgent.com/publish/) — federate a catalog (auto-syncs) or open a one-off PR. Or share the URL directly with agents.
 
 If your tool is an MCP-stdio server and the protocol's own discovery is enough, v0.1 is still a perfectly valid choice; pin `manifest_version: "0.1"` and use the v0.1 schema.
 
@@ -146,6 +180,8 @@ v0.4 is strictly additive on top of v0.3.1, closing the two largest structural g
 - `runtime.install.layout` Shape B — structured layout-with-validation beyond v0.3.1's informational hint
 
 See [`design/v0.4-design-notes.md`](design/v0.4-design-notes.md) for v0.4 rationale, [`design/v0.3.1-design-notes.md`](design/v0.3.1-design-notes.md) for v0.3.1, and [`design/v0.3-design-notes.md`](design/v0.3-design-notes.md#open-design-questions-v03--v04-backlog) for the older open questions; PRs welcome.
+
+Reference-CLI release history: [`CHANGELOG.md`](CHANGELOG.md) · [GitHub Releases](https://github.com/drknowhow/install-manifest-spec/releases). The CLI ships on PyPI as [`install-manifest`](https://pypi.org/project/install-manifest/) and publishes automatically on each GitHub Release via Trusted Publishing.
 
 ## License
 
