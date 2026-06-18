@@ -1,0 +1,66 @@
+name: Publish to PyPI
+
+# Publishes the install-manifest CLI to PyPI via Trusted Publishing (OIDC) —
+# no long-lived API token stored in the repo. Triggers when a GitHub Release
+# is published, and can also be run manually from the Actions tab.
+#
+# ONE-TIME SETUP (PyPI side, done by a project owner):
+#   PyPI → project 'install-manifest' → Settings → Publishing →
+#   "Add a new pending publisher":
+#     Owner:        drknowhow
+#     Repository:   install-manifest-spec
+#     Workflow:     publish.yml
+#     Environment:  pypi
+#   Then create a GitHub Environment named 'pypi' (Settings → Environments).
+#
+# RELEASE FLOW:
+#   1. Bump cli/pyproject.toml + cli/install_manifest/__init__.py, update
+#      CHANGELOG.md, merge to main.
+#   2. Create a GitHub Release tagged vX.Y.Z → this workflow builds and
+#      publishes that version to PyPI.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        working-directory: cli
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: Check artifacts
+        working-directory: cli
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: cli/dist/
+
+  publish:
+    name: Publish to PyPI (Trusted Publishing)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
