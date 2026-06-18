@@ -1,13 +1,15 @@
 """argparse dispatch for the install-manifest CLI.
 
-v0.5.0 subcommands (read-only / prompt-only):
+subcommands:
+  init     [options]                — scaffold a new valid v0.4 manifest
   validate <url-or-path>            — fetch + validate against schema
   show     <url-or-path>            — fetch + validate + render consent screen
   collect-env <url-or-path>         — fetch + validate + render consent + prompt env
   lint     <url-or-path>            — fetch + validate + run best-practice lint rules
   diff     <url-a> <url-b>          — fetch + validate both + classify changes
 
-Side-effecting subcommands (install / smoke / persist / revoke) are
+`init` writes a local scaffold file (the one authoring affordance). The
+tool-side-effecting subcommands (install / smoke / persist / revoke) are
 intentionally not exposed; they will land in subsequent versions.
 
 Exit codes:
@@ -19,12 +21,15 @@ Exit codes:
   5  env collection failed
   6  lint --strict found findings
   7  diff --upgrade-safe found breaking changes
+  8  init: refused to overwrite existing output (use --force)
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from pathlib import Path
 from typing import Sequence
 
 from . import __version__
@@ -33,8 +38,13 @@ from .consent import collect_consent, render_consent
 from .diff import DiffError, diff as run_diff
 from .errors import EnvCollectionError, FetchError, SchemaError, ValidationError
 from .fetch import fetch_manifest
+from .init import DEFAULT_HOMEPAGE, DEFAULT_ID, _name_from_id, build_manifest
 from .lint import lint as run_lint
 from .validate import validate
+
+# Mirrors the v0.4 schema's tool.id pattern; used for a friendly pre-check
+# so a bad id is caught at the prompt rather than only at final validation.
+_TOOL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")
 
 
 def _parse_kv_list(values: Sequence[str] | None) -> dict[str, str]:
@@ -62,6 +72,28 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--version", action="version", version=f"install-manifest {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
+
+    p_init = sub.add_parser(
+        "init",
+        help="Scaffold a new valid v0.4 manifest (mcp-stdio + pip starter).",
+    )
+    p_init.add_argument("--id", dest="tool_id", help="Tool id (lowercase, hyphenated). Names the output file by default.")
+    p_init.add_argument("--name", help="Human-readable display name.")
+    p_init.add_argument("--summary", help="One-sentence description.")
+    p_init.add_argument("--homepage", help="Canonical URL for the tool.")
+    p_init.add_argument("--package", help="pip package name (defaults to the id).")
+    p_init.add_argument("--author", help="Author display name (optional).")
+    p_init.add_argument(
+        "-o", "--output",
+        help="Where to write. Default: <id>.json in the cwd. Use '-' for stdout.",
+    )
+    p_init.add_argument("--force", action="store_true", help="Overwrite the output file if it exists.")
+    p_init.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Skip prompts; use flags and defaults (good for scripts / CI).",
+    )
+    p_init.set_defaults(func=cmd_init)
 
     p_validate = sub.add_parser("validate", help="Fetch and validate a manifest.")
     p_validate.add_argument("source", help="URL or local path to the manifest.")
@@ -160,6 +192,95 @@ def _fetch_and_validate(source: str):
         return 3, None
 
     return 0, manifest
+
+
+def _ask(label: str, default: str = "") -> str:
+    """Prompt with an optional shown default. Blank input (or EOF) -> default."""
+    suffix = f" [{default}]" if default else ""
+    try:
+        raw = input(f"{label}{suffix}: ").strip()
+    except EOFError:
+        raw = ""
+    return raw or default
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    interactive = sys.stdin.isatty() and not args.yes
+
+    tool_id = args.tool_id
+    if interactive and not tool_id:
+        while True:
+            tool_id = _ask("tool id (lowercase-hyphenated)", DEFAULT_ID)
+            if _TOOL_ID_RE.match(tool_id):
+                break
+            print(
+                f"  '{tool_id}' isn't a valid id "
+                "(lowercase letters, digits, hyphens; 3-64 chars). Try again.",
+                file=sys.stderr,
+            )
+    tool_id = tool_id or DEFAULT_ID
+
+    if not _TOOL_ID_RE.match(tool_id):
+        print(
+            f"error: id '{tool_id}' is invalid "
+            "(lowercase letters, digits, hyphens; 3-64 chars).",
+            file=sys.stderr,
+        )
+        return 3
+
+    name = args.name
+    summary = args.summary
+    homepage = args.homepage
+    package = args.package
+    author = args.author
+    if interactive:
+        name = name or _ask("display name", _name_from_id(tool_id))
+        summary = summary or _ask("one-sentence summary (blank to fill in later)") or None
+        homepage = homepage or _ask("homepage URL", DEFAULT_HOMEPAGE)
+        package = package or _ask("pip package name", tool_id)
+        author = author or _ask("author name (optional, blank to skip)") or None
+
+    manifest = build_manifest(
+        tool_id=tool_id,
+        name=name,
+        summary=summary,
+        homepage=homepage,
+        package=package,
+        author=author,
+    )
+
+    # Safety net: the scaffold MUST validate. A failure here is a bug (schema
+    # drift), not user error — surface it loudly rather than writing junk.
+    result = validate(manifest)
+    if not result.ok:
+        print("internal error: generated scaffold failed validation:", file=sys.stderr)
+        for ptr, msg in result.errors:
+            print(f"  {ptr}: {msg}", file=sys.stderr)
+        return 1
+
+    text = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+
+    if args.output == "-":
+        sys.stdout.write(text)
+        return 0
+
+    out_path = Path(args.output) if args.output else Path(f"{tool_id}.json")
+    if out_path.exists() and not args.force:
+        print(
+            f"error: {out_path} already exists. "
+            "Use --force to overwrite, or -o to choose another path.",
+            file=sys.stderr,
+        )
+        return 8
+    out_path.write_text(text, encoding="utf-8")
+
+    print(f"ok: wrote {out_path}", file=sys.stderr)
+    print(
+        f"  next: edit the TODO placeholders, then run "
+        f"`install-manifest validate {out_path}` and `install-manifest lint {out_path}`.",
+        file=sys.stderr,
+    )
+    return 0
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
