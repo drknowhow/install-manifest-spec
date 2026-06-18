@@ -1,6 +1,8 @@
 # Reference CLI — `install-manifest`
 
-**Status:** v0.5.0 (2026-05-28) — read-only and prompt-only subcommands implemented (`validate`, `show`, `collect-env`, `lint`, `diff`). The validator dispatches automatically on the manifest's declared `manifest_version` and supports `0.1`, `0.2`, `0.3`, `0.3.1`, and `0.4` (all schemas bundled with the wheel for offline validation). Side-effecting subcommands (`install`, `smoke`, `revoke`) remain pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
+**Status:** v0.6.0 (2026-06-18) — adds `init` (scaffold a new valid v0.4 manifest) on top of the read-only / prompt-only subcommands (`validate`, `show`, `collect-env`, `lint`, `diff`). The validator dispatches automatically on the manifest's declared `manifest_version` and supports `0.1`, `0.2`, `0.3`, `0.3.1`, and `0.4` (all schemas bundled with the wheel for offline validation). Side-effecting subcommands (`install`, `smoke`, `revoke`) remain pseudocode + architecture below; they will land in subsequent versions, behind their own subcommands and gated by explicit flags.
+
+v0.6 adds `init`: scaffold a new, schema-valid v0.4 manifest (an `mcp-stdio` + `pip` starter) pre-filled with `TODO:` placeholders, so authoring a manifest no longer starts with reading the schema. `install-manifest init --id my-tool` writes `my-tool.json`; `-o -` streams to stdout; run it bare to fill fields at interactive prompts, or `--yes` to take defaults for scripts/CI. The generated file passes `validate` immediately; `lint` then points at what to harden next.
 
 v0.5 adds two new pre-publish workflows on top of `validate`: `lint` runs best-practice rules (kebab-case IDs, SemVer versions, https-only URLs, secret-input constraints, missing `verify`/`kill_switch`) and `diff` classifies changes between two same-version manifests into breaking / additive / cosmetic so publishers can hold themselves to upgrade-safety contracts.
 
@@ -10,8 +12,9 @@ This document is the design plan for the full CLI. The shipped slice is describe
 
 ## Implementation status
 
-| Subcommand    | Shipped in 0.5.0 | Notes                                                                       |
-|---------------|:----------------:|-----------------------------------------------------------------------------|
+| Subcommand    | Shipped | Notes                                                                       |
+|---------------|:-------:|-----------------------------------------------------------------------------|
+| `init`        |    ✓    | scaffold a new valid v0.4 manifest (mcp-stdio + pip starter). `--id`, `-o`, `--force`, `--yes`. |
 | `validate`    |        ✓         | fetch + JSON Schema validation against v0.1 / v0.2 / v0.3 / v0.3.1 / v0.4, exit 0/2/3. |
 | `show`        |        ✓         | fetch + validate + render consent screen. Read-only.                        |
 | `collect-env` |        ✓         | fetch + validate + render consent + prompt for env values. **No install.**  |
@@ -26,12 +29,28 @@ This document is the design plan for the full CLI. The shipped slice is describe
 
 ```
 pip install install-manifest
+install-manifest init        --id my-tool                                  # scaffold my-tool.json
 install-manifest validate    https://toolspace.yepgent.com/examples/gmail.v0.3.json
 install-manifest show        https://toolspace.yepgent.com/examples/gmail.v0.3.json
 install-manifest collect-env https://toolspace.yepgent.com/examples/gmail.v0.3.json --yes --non-interactive --env GOOGLE_REFRESH_TOKEN=test
 install-manifest lint        https://toolspace.yepgent.com/examples/gmail.v0.3.json --strict
 install-manifest diff        ./old.json ./new.json --upgrade-safe
 ```
+
+## Scaffold
+
+`install-manifest init` writes a new, schema-valid v0.4 manifest so authoring doesn't start from a blank file. The scaffold is an `mcp-stdio` tool installed via `pip` — the most common shape — with every field either filled from your answers or set to a schema-valid `TODO:` placeholder you edit in place.
+
+```
+install-manifest init --id my-tool                 # writes ./my-tool.json
+install-manifest init --id my-tool -o -             # stream to stdout
+install-manifest init --id my-tool --name "My Tool" --summary "..." --package my-tool-pkg --yes
+install-manifest init                               # bare: prompts for id/name/summary/homepage/package/author
+```
+
+Flags: `--id` (names the output file), `--name`, `--summary`, `--homepage`, `--package`, `--author`, `-o/--output` (default `<id>.json`; `-` for stdout), `--force` (overwrite), `-y/--yes` (skip prompts — use flags/defaults, for scripts/CI). Run bare in a terminal to fill fields at prompts. Exit `8` if the output exists and `--force` wasn't given; exit `3` on an invalid id.
+
+The generated manifest passes `validate` immediately. Then run `lint` — the starter intentionally trips a couple of advisory rules (e.g. add a `verify` block, constrain the secret env var) to point you at the next hardening steps. Targets v0.4 only for now; edit `runtime` afterward for other runtime kinds.
 
 ## Lint
 
