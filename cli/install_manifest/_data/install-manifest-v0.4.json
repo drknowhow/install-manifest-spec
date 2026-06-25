@@ -78,6 +78,33 @@
       }
     },
 
+    "publisher": {
+      "type": "object",
+      "description": "Optional publisher identity binding. When present, lets a consumer cryptographically verify which entity published this manifest without trusting the host URL it was fetched from. Designed for domainless publishers whose identity is rooted in a W3C DID rather than DNS. Additive: manifests without this block remain valid.",
+      "additionalProperties": false,
+      "required": ["did", "signature"],
+      "properties": {
+        "did": {
+          "type": "string",
+          "pattern": "^did:(plc|web):.+",
+          "description": "Decentralized Identifier of the publisher. Initial method set is did:plc and did:web only, mirroring ards-project/ard-spec#49; further DID methods are deferred. Resolution: did:plc -> https://plc.directory/<did>, did:web -> https://<host>/.well-known/did.json."
+        },
+        "did_kid": {
+          "type": "string",
+          "description": "Optional key id selecting a verificationMethod within the resolved DID Document. When omitted, verifiers use the first verificationMethod whose key type matches the JWS alg."
+        },
+        "signature": {
+          "type": "string",
+          "description": "Detached JWS (RFC 7515 A.5) over the JCS-canonicalized (RFC 8785) manifest bytes with publisher.signature removed. Canonicalization MUST be JCS, matching ARD 5.1.1. alg is negotiated via the DID Document verificationMethod (e.g. EdDSA for did:plc Ed25519 keys)."
+        },
+        "fqdn": {
+          "type": "string",
+          "format": "hostname",
+          "description": "Optional FQDN binding for hybrid publishers that control both a domain and a DID. When present, MUST equal the manifest's serving host. Lets a did:web publisher align with ARD's FQDN branch."
+        }
+      }
+    },
+
     "runtime": {
       "type": "object",
       "description": "How the tool is acquired and how the agent invokes it.",
