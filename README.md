@@ -40,6 +40,21 @@ install-manifest validate my-tool.json
 
 ---
 
+## Publisher identity (optional)
+
+A manifest can carry an optional `publisher` block that cryptographically binds it to a publisher's [Decentralized Identifier (DID)](https://www.w3.org/TR/did-core/) — so a consumer can verify *who* published it without trusting the host URL it was fetched from. This is aimed at domainless publishers (identity rooted in `did:plc` / `did:web` rather than DNS).
+
+```json
+"publisher": {
+  "did": "did:plc:ewvi7nxzyoun6zhxrhs64oiz",
+  "signature": "<detached JWS over the JCS-canonicalized manifest bytes, publisher.signature removed>"
+}
+```
+
+Verification resolves the DID Document, then checks the detached JWS (RFC 7515) over the **JCS-canonicalized (RFC 8785)** manifest. The block is additive and optional — manifests without it stay valid. It mirrors the ARD identity layer ([ards-project/ard-spec#47](https://github.com/ards-project/ard-spec/issues/47)) so discovery and safe-install share one signing model. See [`design/publisher-v1-design-notes.md`](design/publisher-v1-design-notes.md).
+
+---
+
 ## Versions
 
 | Version | Status | Schema | Design notes | What's new |
